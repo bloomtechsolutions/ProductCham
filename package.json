@@ -1,0 +1,23 @@
+{
+  "name": "bml-product-champion",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@upstash/redis": "1.41.0",
+    "next": "15.5.29",
+    "qrcode.react": "4.2.0",
+    "react": "19.1.1",
+    "react-dom": "19.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.3",
+    "@types/react": "19.1.12",
+    "@types/react-dom": "19.1.9",
+    "typescript": "5.9.2"
+  }
+}

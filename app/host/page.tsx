@@ -1,20 +1,17 @@
 "use client";
-import { QRCodeSVG } from "qrcode.react";
-import { useEffect, useRef, useState } from "react";
-import { useCountdown, usePoll } from "@/lib/usePoll";
-import { LeaderRow, PublicState, secs } from "@/lib/types";
-
-interface HostState extends PublicState {
-  players: string[];
-  answered: number;
-  stats: { trueCount: number; falseCount: number; correctCount: number; fastest: { name: string; ms: number }[] } | null;
-  leaderboard: LeaderRow[] | null;
-}
+import { useEffect, useState } from "react";
+import { Brand } from "@/components/Brand";
+import { ExpandIcon, ScreenIcon, ShrinkIcon } from "@/components/Icons";
+import { Board, Stage } from "@/components/Stage";
+import { ACTIVITY, EVENT } from "@/lib/types";
+import { useFullscreen } from "@/lib/useFullscreen";
+import { useHostGame } from "@/lib/useHostGame";
 
 const KEY = "bmlpc:host";
+type Session = { code: string; hostToken: string };
 
 export default function HostPage() {
-  const [session, setSession] = useState<{ code: string; hostToken: string } | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [pin, setPin] = useState("");
   const [pinRequired, setPinRequired] = useState(false);
@@ -30,7 +27,8 @@ export default function HostPage() {
     fetch("/api/game").then((r) => r.json()).then((j) => setPinRequired(Boolean(j.pinRequired))).catch(() => {});
   }, []);
 
-  const create = async () => {
+  const create = async (e: React.FormEvent) => {
+    e.preventDefault();
     setBusy(true);
     setErr(null);
     try {
@@ -53,61 +51,42 @@ export default function HostPage() {
   };
 
   if (!loaded) return null;
+  if (session) return <HostGame session={session} onReset={reset} />;
 
-  if (!session) {
-    return (
-      <>
-        <div className="header"><b>BML Product Champion</b><small>Host</small></div>
-        <main className="wrap narrow stack" style={{ paddingTop: 48 }}>
-          <h1>Host a new game</h1>
-          <p className="muted">Show this screen on a projector. Players scan the QR code to join.</p>
+  return (
+    <>
+      <header className="topbar"><Brand /></header>
+      <main className="wrap narrow">
+        <form className="hero" onSubmit={create}>
+          <div>
+            <div className="eyebrow">{EVENT}</div>
+            <h1>Host <span>{ACTIVITY}</span></h1>
+          </div>
+          <p className="muted" style={{ fontSize: "1.1rem", margin: 0 }}>
+            Create a game, then open the presentation screen on the projector. Players scan the QR code to register.
+          </p>
           {pinRequired && (
-            <input type="password" placeholder="Host PIN" value={pin} onChange={(e) => setPin(e.target.value)} />
+            <label className="field">
+              <span>Host PIN</span>
+              <input type="password" value={pin} onChange={(e) => setPin(e.target.value)} autoFocus />
+            </label>
           )}
           {err && <div className="err">{err}</div>}
-          <button className="btn" onClick={create} disabled={busy}>{busy ? "Creating…" : "Create game"}</button>
-        </main>
-      </>
-    );
-  }
-
-  return <HostGame session={session} onReset={reset} />;
+          <button className="btn lg" disabled={busy}>{busy ? "Creating…" : "Create game"}</button>
+        </form>
+      </main>
+    </>
+  );
 }
 
-function HostGame({ session, onReset }: { session: { code: string; hostToken: string }; onReset: () => void }) {
+function HostGame({ session, onReset }: { session: Session; onReset: () => void }) {
   const { code, hostToken } = session;
-  const { data, error, offset, refresh } = usePoll<HostState>(
-    `/api/game/${code}?host=${encodeURIComponent(hostToken)}`,
-    1000,
-  );
-  const QUESTION_SECONDS = data?.questionSeconds ?? 20;
-  const remaining = useCountdown(data?.phase === "question" ? data.endsAt : undefined, offset);
-  const [busy, setBusy] = useState(false);
-  const [joinUrl, setJoinUrl] = useState("");
-  const revealSent = useRef<number>(-1);
-
-  useEffect(() => setJoinUrl(`${window.location.origin}/join?code=${code}`), [code]);
-
-  const act = async (action: string) => {
-    setBusy(true);
-    try {
-      await fetch(`/api/game/${code}/control`, { method: "POST", body: JSON.stringify({ hostToken, action }) });
-      refresh();
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  // Auto-reveal when time runs out or everyone has answered.
-  useEffect(() => {
-    if (!data || data.phase !== "question" || revealSent.current === data.qIndex) return;
-    const allIn = data.players.length > 0 && data.answered >= data.players.length;
-    if (remaining <= 0 || allIn) {
-      revealSent.current = data.qIndex;
-      act("reveal");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, remaining]);
+  const { data, error, remaining, busy, act } = useHostGame(code, hostToken);
+  const fs = useFullscreen();
+  const [origin, setOrigin] = useState("");
+  useEffect(() => setOrigin(window.location.origin), []);
+  const joinUrl = origin ? `${origin}/join?code=${code}` : "";
+  const screenUrl = `/screen/${code}?k=${hostToken}`;
 
   if (error === "Game not found." || error === "Not authorised.") {
     return (
@@ -119,150 +98,67 @@ function HostGame({ session, onReset }: { session: { code: string; hostToken: st
   }
   if (!data) return <main className="wrap"><p className="muted">Loading…</p></main>;
 
+  const primary = (() => {
+    switch (data.phase) {
+      case "lobby": return { label: `Start game (${data.players.length} players)`, action: "start", disabled: data.players.length === 0 };
+      case "question": return { label: "Reveal answer now", action: "reveal", disabled: false };
+      case "reveal": return { label: data.qIndex + 1 >= data.total ? "Show final results" : "Next question", action: "next", disabled: false };
+      default: return null;
+    }
+  })();
+
+  const status =
+    data.phase === "lobby" ? "Lobby — waiting for players"
+    : data.phase === "question" ? `Question ${data.qIndex + 1} of ${data.total} · ${Math.ceil(remaining)}s left · ${data.answered}/${data.players.length} answered`
+    : data.phase === "reveal" ? `Answer revealed · Question ${data.qIndex + 1} of ${data.total}`
+    : "Game finished";
+
   return (
     <>
-      <div className="header">
-        <b>BML Product Champion</b>
-        <small>Game {code} · {data.players.length} players</small>
-      </div>
-      <main className="wrap stack">
-        {error && <div className="err">{error}</div>}
-
-        {data.phase === "lobby" && (
-          <div className="grid2">
-            <div className="card stack center" style={{ alignItems: "center" }}>
-              <h2>Scan to join</h2>
-              {joinUrl && <QRCodeSVG value={joinUrl} size={300} marginSize={2} style={{ width: "100%", maxWidth: 320, height: "auto" }} />}
-              <div className="muted">or go to <b>{joinUrl.replace(/^https?:\/\//, "").replace(/\?.*$/, "")}</b> and enter</div>
-              <div className="code">{code}</div>
-            </div>
-            <div className="card stack">
-              <h2>Players ({data.players.length})</h2>
-              {data.players.length === 0 ? (
-                <p className="muted">Waiting for players to scan the QR code…</p>
-              ) : (
-                <div className="chips">{data.players.map((n) => <span className="chip" key={n}>{n}</span>)}</div>
-              )}
-              <div style={{ flex: 1 }} />
-              <p className="muted">{data.total} questions · {QUESTION_SECONDS}s each · Accounts, Cards, Financing, Business Products</p>
-              <button className="btn" disabled={busy || data.players.length === 0} onClick={() => act("start")}>
-                Start game
-              </button>
-            </div>
-          </div>
-        )}
-
-        {(data.phase === "question" || data.phase === "reveal") && data.question && (
-          <div className="card stack">
-            <div className="row" style={{ justifyContent: "space-between" }}>
-              <span className="pill">{data.question.category}</span>
-              <b>Question {data.qIndex + 1} / {data.total}</b>
-            </div>
-            <div className="big">{data.question.text}</div>
-            {data.phase === "question" && (
-              <>
-                <div className="timer"><div style={{ width: `${(remaining / QUESTION_SECONDS) * 100}%` }} /></div>
-                <div className="row" style={{ justifyContent: "space-between" }}>
-                  <span className="big">{Math.ceil(remaining)}s</span>
-                  <span className="muted">{data.answered} / {data.players.length} answered</span>
-                  <button className="btn ghost" disabled={busy} onClick={() => act("reveal")}>Reveal now</button>
-                </div>
-              </>
-            )}
-            {data.phase === "reveal" && data.reveal && data.stats && (
-              <RevealPanel state={data} onNext={() => act("next")} busy={busy} />
-            )}
-          </div>
-        )}
-
-        {data.phase === "finished" && data.leaderboard && (
-          <Final board={data.leaderboard} onNew={onReset} />
-        )}
-
-        {data.phase !== "finished" && data.phase !== "lobby" && (
-          <div className="row" style={{ justifyContent: "flex-end" }}>
-            <button className="btn ghost" disabled={busy} onClick={() => confirm("End the game now?") && act("end")}>End game</button>
-          </div>
-        )}
-      </main>
-    </>
-  );
-}
-
-function RevealPanel({ state, onNext, busy }: { state: HostState; onNext: () => void; busy: boolean }) {
-  const { reveal, stats, leaderboard } = state;
-  if (!reveal || !stats) return null;
-  const totalAns = Math.max(1, stats.trueCount + stats.falseCount);
-  const last = state.qIndex + 1 >= state.total;
-  return (
-    <div className="stack">
-      <div className={`result ${reveal.answer ? "good" : "bad"}`}>
-        <div className="big">Answer: {reveal.answer ? "TRUE" : "FALSE"}</div>
-        <div style={{ marginTop: 8 }}>{reveal.explanation}</div>
-      </div>
-      <div className="grid2">
-        <div className="stack">
-          <div className="bar"><b style={{ width: 60 }}>True</b><div className="fill" style={{ width: `${(stats.trueCount / totalAns) * 80}%`, background: "var(--true)" }} /><span>{stats.trueCount}</span></div>
-          <div className="bar"><b style={{ width: 60 }}>False</b><div className="fill" style={{ width: `${(stats.falseCount / totalAns) * 80}%`, background: "var(--false)" }} /><span>{stats.falseCount}</span></div>
-          <p className="muted">{stats.correctCount} of {state.players.length} got it right.</p>
-          {stats.fastest.length > 0 && (
-            <div>
-              <b>Fastest correct</b>
-              <ol style={{ margin: "6px 0 0", paddingLeft: 20 }}>
-                {stats.fastest.map((f) => <li key={f.name}>{f.name} — {secs(f.ms)}</li>)}
-              </ol>
-            </div>
+      <header className="topbar">
+        <Brand />
+        <div className="meta">
+          <span className="pill">Game {code}</span>
+          <a className="btn sm ghost" href={screenUrl} target="_blank" rel="noopener">
+            <ScreenIcon />Open presentation screen
+          </a>
+          {fs.supported && (
+            <button className="btn sm ghost" onClick={fs.toggle} title="Fullscreen (F)">
+              {fs.isFull ? <ShrinkIcon /> : <ExpandIcon />}{fs.isFull ? "Exit fullscreen" : "Fullscreen"}
+            </button>
           )}
         </div>
-        {leaderboard && <Board rows={leaderboard.slice(0, 5)} title="Top 5" />}
-      </div>
-      <button className="btn" disabled={busy} onClick={onNext}>{last ? "Show final results" : "Next question"}</button>
-    </div>
-  );
-}
+      </header>
 
-function Board({ rows, title, full = false }: { rows: LeaderRow[]; title: string; full?: boolean }) {
-  return (
-    <div>
-      <b>{title}</b>
-      <table>
-        <thead><tr><th>#</th><th>Name</th>{full && <th>Staff ID</th>}{full && <th>Department</th>}<th className="num">Score</th><th className="num">Time</th></tr></thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.id}>
-              <td>{r.rank}</td>
-              <td>{r.name}{r.tieBrokenByTime && <span className="tag">tie → time</span>}</td>
-              {full && <td>{r.staffId ?? "—"}</td>}
-              {full && <td>{r.department ?? "—"}</td>}
-              <td className="num">{r.score}</td>
-              <td className="num">{secs(r.timeMs)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
+      {error && <div className="wrap"><div className="err">{error}</div></div>}
+      <Stage data={data} joinUrl={joinUrl} remaining={remaining} docked />
 
-function Final({ board, onNew }: { board: LeaderRow[]; onNew: () => void }) {
-  const [first, second, third] = board;
-  const tie = first && second && first.score === second.score;
-  return (
-    <div className="stack">
-      <div className="card stack center">
-        <h1>🏆 BML Product Champion</h1>
-        {first ? <div className="code" style={{ letterSpacing: 0 }}>{first.name}</div> : <p>No players</p>}
-        {first && <div className="muted">{first.score} correct · {secs(first.timeMs)} total answer time</div>}
-        {tie && <div className="pill" style={{ alignSelf: "center" }}>Draw on score — decided by fastest total answer time</div>}
+      {data.phase === "finished" && data.leaderboard && (
+        <div className="wrap stack">
+          <div className="card stack">
+            <div className="row between">
+              <h2>Full results</h2>
+              <span className="muted">Ranked by score, then fastest total answer time</span>
+            </div>
+            <Board rows={data.leaderboard} full />
+          </div>
+        </div>
+      )}
+
+      <div className="dock">
+        <span className="status">{status}</span>
+        <div className="row">
+          {data.phase !== "finished" && data.phase !== "lobby" && (
+            <button className="btn ghost" disabled={busy} onClick={() => confirm("End the game now and show results?") && act("end")}>
+              End game
+            </button>
+          )}
+          {data.phase === "finished" && <button className="btn ghost" onClick={onReset}>Host a new game</button>}
+          {primary && (
+            <button className="btn" disabled={busy || primary.disabled} onClick={() => act(primary.action)}>{primary.label}</button>
+          )}
+        </div>
       </div>
-      <div className="podium">
-        <div className="p">{second ? <><div className="big">🥈</div><b>{second.name}</b><div className="muted">{second.score} · {secs(second.timeMs)}</div></> : null}</div>
-        <div className="p p1">{first ? <><div className="big">🥇</div><b>{first.name}</b><div className="muted">{first.score} · {secs(first.timeMs)}</div></> : null}</div>
-        <div className="p">{third ? <><div className="big">🥉</div><b>{third.name}</b><div className="muted">{third.score} · {secs(third.timeMs)}</div></> : null}</div>
-      </div>
-      <div className="card"><Board rows={board} title="Full leaderboard" full /></div>
-      <p className="muted">Ranking: most correct answers. On a draw, the lower total time across correct answers wins.</p>
-      <button className="btn" onClick={onNew}>Host a new game</button>
-    </div>
+    </>
   );
 }

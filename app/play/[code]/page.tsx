@@ -2,19 +2,15 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { Brand } from "@/components/Brand";
+import { BigTrophy, CheckIcon, CrossIcon } from "@/components/Icons";
 import { useCountdown, usePoll } from "@/lib/usePoll";
-import { LeaderRow, PublicState, secs } from "@/lib/types";
+import { LeaderRow, PublicState, catClass, secs } from "@/lib/types";
 
 interface Me {
-  name: string;
-  answered: boolean;
-  answer?: boolean | null;
-  correct?: boolean;
-  ms?: number | null;
-  score?: number;
-  rank?: number;
-  timeMs?: number;
-  of?: number;
+  name: string; answered: boolean;
+  answer?: boolean | null; correct?: boolean; ms?: number | null; score?: number;
+  rank?: number; timeMs?: number; of?: number;
 }
 interface PlayerState extends PublicState { me: Me | null; leaderboard?: LeaderRow[] }
 
@@ -24,7 +20,6 @@ export default function PlayPage() {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    // Credentials come from the URL (survives private mode) or localStorage.
     const sp = new URLSearchParams(window.location.search);
     const p = sp.get("p"), t = sp.get("t");
     if (p && t) {
@@ -43,10 +38,13 @@ export default function PlayPage() {
   if (!loaded) return null;
   if (!creds) {
     return (
-      <main className="wrap narrow stack" style={{ paddingTop: 48 }}>
-        <p>You haven&apos;t joined this game yet.</p>
-        <Link className="btn" href={`/join?code=${code}`}>Join game {code}</Link>
-      </main>
+      <>
+        <header className="topbar"><Brand /></header>
+        <main className="phone">
+          <p>You haven&apos;t registered for this game yet.</p>
+          <Link className="btn lg" href={`/join?code=${code}`}>Register for game {code}</Link>
+        </main>
+      </>
     );
   }
   return <Player code={code} creds={creds} />;
@@ -75,89 +73,114 @@ function Player({ code, creds }: { code: string; creds: { playerId: string; toke
     refresh();
   };
 
-  if (!data) return <main className="wrap narrow"><p className="muted">{error ?? "Connecting…"}</p></main>;
+  const header = (
+    <header className="topbar">
+      <Brand />
+      {data?.me && <span className="pill">{data.me.name}</span>}
+    </header>
+  );
+
+  if (!data) return <>{header}<main className="phone"><p className="muted">{error ?? "Connecting…"}</p></main></>;
   if (!data.me) {
     return (
-      <main className="wrap narrow stack" style={{ paddingTop: 48 }}>
-        <p>We couldn&apos;t find you in this game.</p>
-        <Link className="btn" href={`/join?code=${code}`}>Join again</Link>
-      </main>
+      <>{header}
+        <main className="phone">
+          <p>We couldn&apos;t find your registration in this game.</p>
+          <Link className="btn lg" href={`/join?code=${code}`}>Register again</Link>
+        </main>
+      </>
     );
   }
 
   const me = data.me;
   const pickedNow = picked && picked.q === data.qIndex ? picked : null;
   const answered = me.answered || Boolean(pickedNow);
+  const qSecs = data.questionSeconds || 20;
 
   return (
     <>
-      <div className="header"><b>{me.name}</b><small>Game {code}{data.qIndex >= 0 && data.phase !== "finished" ? ` · Q${data.qIndex + 1}/${data.total}` : ""}</small></div>
-      <main className="wrap narrow stack">
+      {header}
+      <main className="phone">
         {error && <div className="err">{error}</div>}
 
         {data.phase === "lobby" && (
-          <div className="card stack center">
-            <h2>You&apos;re in! 🎉</h2>
-            <p className="muted">Look at the main screen. The quiz will start soon.</p>
-            <p className="muted">Tip: most correct answers wins. On a draw, the fastest wins — so be quick!</p>
+          <div className="stack center" style={{ marginTop: "8vh", alignItems: "center" }}>
+            <div className="result none" style={{ width: "100%" }}>
+              <CheckIcon className="v-ic" />
+              <div className="big" style={{ marginTop: 8 }}>You&apos;re registered!</div>
+              <p className="muted" style={{ margin: "8px 0 0" }}>Watch the main screen — the host will start soon.</p>
+            </div>
+            <div className="card" style={{ width: "100%", textAlign: "left" }}>
+              <b>How to win</b>
+              <p className="muted" style={{ margin: "6px 0 0" }}>
+                {data.total} True/False questions, {qSecs}s each. Most correct answers wins — on a tie, the fastest total answer time wins.
+              </p>
+            </div>
           </div>
         )}
 
         {data.phase === "question" && data.question && (
-          <div className="stack">
-            <div className="row" style={{ justifyContent: "space-between" }}>
-              <span className="pill">{data.question.category}</span>
-              <b>{Math.ceil(remaining)}s</b>
+          <>
+            <div className="row between">
+              <span className={`pill ${catClass(data.question.category)}`}><span className="dot" /><span style={{ color: "var(--ink)" }}>{data.question.category}</span></span>
+              <span className="pill">Q{data.qIndex + 1}/{data.total} · {Math.ceil(remaining)}s</span>
             </div>
-            <div className="timer"><div style={{ width: `${(remaining / (data.questionSeconds || 20)) * 100}%` }} /></div>
-            <div style={{ fontSize: "1.25rem", fontWeight: 600 }}>{data.question.text}</div>
+            <div className="timer-bar"><div style={{ width: `${(remaining / qSecs) * 100}%` }} /></div>
+            <div className="p-question">{data.question.text}</div>
             {!answered && remaining > 0 ? (
               <div className="tf">
-                <button className="t" onClick={() => send(true)}>TRUE</button>
-                <button className="f" onClick={() => send(false)}>FALSE</button>
+                <button className="t" onClick={() => send(true)}><CheckIcon />TRUE</button>
+                <button className="f" onClick={() => send(false)}><CrossIcon />FALSE</button>
               </div>
             ) : (
               <div className="result none">
                 <div className="big">{answered ? `You said ${pickedNow ? (pickedNow.answer ? "TRUE" : "FALSE") : "…"}` : "Time's up"}</div>
-                <div>{msg ?? "Waiting for the answer…"}</div>
+                <div className="muted" style={{ marginTop: 6 }}>{msg ?? "Waiting for the answer…"}</div>
               </div>
             )}
             {msg && !answered && <div className="err">{msg}</div>}
-          </div>
+          </>
         )}
 
         {data.phase === "reveal" && data.reveal && (
-          <div className="stack">
-            <div className={`result ${me.answer === null || me.answer === undefined ? "none" : me.correct ? "good" : "bad"}`}>
-              <div className="big">
-                {me.answer === null || me.answer === undefined ? "No answer" : me.correct ? "Correct! ✅" : "Not quite ❌"}
-              </div>
-              <div style={{ marginTop: 6 }}>Answer: <b>{data.reveal.answer ? "TRUE" : "FALSE"}</b>{me.ms != null && ` · you took ${secs(me.ms)}`}</div>
+          <>
+            <div className={`result ${me.answer == null ? "none" : me.correct ? "good" : "bad"}`}>
+              {me.answer != null && (me.correct ? <CheckIcon className="v-ic" /> : <CrossIcon className="v-ic" />)}
+              <div className="big">{me.answer == null ? "No answer" : me.correct ? "Correct!" : "Not quite"}</div>
+              <div style={{ marginTop: 6 }}>The answer is <b>{data.reveal.answer ? "TRUE" : "FALSE"}</b></div>
             </div>
-            <p className="muted">{data.reveal.explanation}</p>
-            <div className="card center"><b>Your score: {me.score ?? 0} / {data.qIndex + 1}</b></div>
-          </div>
+            <p className="muted" style={{ margin: 0 }}>{data.reveal.explanation}</p>
+            <div className="score-strip">
+              <div className="card"><span className="muted">Score</span><b>{me.score ?? 0}<span className="muted" style={{ fontSize: "1rem" }}> / {data.qIndex + 1}</span></b></div>
+              <div className="card"><span className="muted">Your time</span><b>{me.ms != null ? secs(me.ms) : "—"}</b></div>
+            </div>
+          </>
         )}
 
         {data.phase === "finished" && (
-          <div className="stack">
-            <div className="card stack center">
-              <div className="big">{me.rank === 1 ? "🏆 You're the Product Champion!" : "Game over"}</div>
-              {me.rank && <div className="code" style={{ letterSpacing: 0 }}>#{me.rank}<span className="muted" style={{ fontSize: "1rem" }}> of {me.of}</span></div>}
-              <div>{me.score} / {data.total} correct · {secs(me.timeMs ?? 0)} total time</div>
+          <>
+            <div className="card stack center" style={{ alignItems: "center" }}>
+              {me.rank === 1 && <BigTrophy className="trophy" />}
+              <div className="eyebrow">{me.rank === 1 ? "You are the Product Champion!" : "Final result"}</div>
+              {me.rank && <div className="winner-name" style={{ fontSize: "4rem" }}>#{me.rank}</div>}
+              <div className="muted">of {me.of} players</div>
+              <div className="score-strip" style={{ width: "100%" }}>
+                <div className="card"><span className="muted">Score</span><b>{me.score} / {data.total}</b></div>
+                <div className="card"><span className="muted">Total time</span><b>{secs(me.timeMs ?? 0)}</b></div>
+              </div>
             </div>
             {data.leaderboard && (
               <div className="card stack">
                 <b>Top 3</b>
                 {data.leaderboard.map((r) => (
-                  <div key={r.id} className="row" style={{ justifyContent: "space-between" }}>
-                    <span>{["🥇", "🥈", "🥉"][r.rank - 1]} {r.name}</span>
+                  <div key={r.id} className="row between">
+                    <span className="row" style={{ gap: 10 }}><span className={`rank-badge r${r.rank}`}>{r.rank}</span>{r.name}</span>
                     <span className="muted">{r.score} · {secs(r.timeMs)}</span>
                   </div>
                 ))}
               </div>
             )}
-          </div>
+          </>
         )}
       </main>
     </>

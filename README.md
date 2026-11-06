@@ -3,8 +3,17 @@
 A live True/False quiz on BML products and services: Accounts, Cards, Financing and Business Products.
 It's a Next.js app on Vercel and stores its data in Supabase.
 
+**Refresher Training 2026 · Product Champion**
+
+## Screens
+| Page | Use it on | What it shows |
+|---|---|---|
+| `/screen/<code>` | Projector or TV | The presentation: lobby with QR code, questions with a countdown ring, answer reveals, and the podium. Click **Fullscreen** (bottom-right) or press **F**. |
+| `/host` | Host laptop or tablet | The same view plus the controls (Start, Reveal, Next, End) and full results with staff IDs. |
+| `/join`, `/play/<code>` | Players' phones | Registration, True/False buttons and personal results. |
+
 ## How it works
-1. **Host** opens `/host` on a projector and clicks **Create game**. A QR code and a 6-digit game code appear.
+1. **Host** opens `/host` and clicks **Create game**, then **Open presentation screen**. Drag that window to the projector and press **F** to go fullscreen.
 2. **Players** scan the QR code and register with their **full name, staff ID** and (optionally) **department/branch**.
 3. The host clicks **Start game**. Each question is open for 20 seconds. It closes early once everyone has answered.
 4. After each question the screen shows the answer, the explanation, the answer split, the fastest correct players and the top 5.

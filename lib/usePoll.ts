@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 /** Polls a JSON endpoint; also returns clock offset (server - client) in ms. */
 export function usePoll<T>(url: string | null, intervalMs: number) {
@@ -41,7 +41,8 @@ export function usePoll<T>(url: string | null, intervalMs: number) {
     };
   }, [url, intervalMs, nonce]);
 
-  return { data, error, offset, refresh: () => setNonce((n) => n + 1) };
+  const refresh = useCallback(() => setNonce((n) => n + 1), []);
+  return { data, error, offset, refresh };
 }
 
 /** Seconds remaining until a server timestamp, re-rendering ~10x/sec. */

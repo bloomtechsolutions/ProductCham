@@ -1,6 +1,8 @@
 "use client";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
+import { Brand } from "@/components/Brand";
+import { ACTIVITY, EVENT } from "@/lib/types";
 
 function JoinForm() {
   const params = useSearchParams();
@@ -19,7 +21,10 @@ function JoinForm() {
     setErr(null);
     try {
       const c = code.trim();
-      const res = await fetch(`/api/game/${encodeURIComponent(c)}/join`, { method: "POST", body: JSON.stringify({ name, staffId, department }) });
+      const res = await fetch(`/api/game/${encodeURIComponent(c)}/join`, {
+        method: "POST",
+        body: JSON.stringify({ name, staffId, department }),
+      });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error);
       try { localStorage.setItem(`bmlpc:${c}`, JSON.stringify({ playerId: j.playerId, token: j.token, name: j.name })); } catch {}
@@ -31,26 +36,35 @@ function JoinForm() {
   };
 
   return (
-    <form className="stack" onSubmit={join}>
-      <h1>Register to play</h1>
-      {!fromQr && (
-        <input inputMode="numeric" placeholder="Game code" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} maxLength={6} />
+    <form className="hero" style={{ paddingTop: "3vh" }} onSubmit={join}>
+      <div>
+        <div className="eyebrow">{EVENT}</div>
+        <h1 style={{ fontSize: "clamp(2rem, 8vw, 3rem)" }}>Register for <span>{ACTIVITY}</span></h1>
+      </div>
+      {fromQr ? (
+        <span className="pill" style={{ alignSelf: "flex-start" }}>Game {code}</span>
+      ) : (
+        <label className="field">
+          <span>Game code</span>
+          <input inputMode="numeric" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} maxLength={6} placeholder="6-digit code" required />
+        </label>
       )}
-      {fromQr && <p className="muted">Game <b>{code}</b></p>}
-      <label className="stack" style={{ gap: 6 }}>
-        <b>Full name</b>
+      <label className="field">
+        <span>Full name</span>
         <input value={name} onChange={(e) => setName(e.target.value)} maxLength={40} autoFocus autoComplete="name" required />
       </label>
-      <label className="stack" style={{ gap: 6 }}>
-        <b>Staff ID</b>
+      <label className="field">
+        <span>Staff ID</span>
         <input value={staffId} onChange={(e) => setStaffId(e.target.value)} maxLength={20} autoComplete="off" required />
       </label>
-      <label className="stack" style={{ gap: 6 }}>
-        <b>Department / Branch <span className="muted" style={{ fontWeight: 400 }}>(optional)</span></b>
+      <label className="field">
+        <span>Department / Branch <small>(optional)</small></span>
         <input value={department} onChange={(e) => setDepartment(e.target.value)} maxLength={60} />
       </label>
       {err && <div className="err">{err}</div>}
-      <button className="btn" disabled={busy || !code || !name.trim() || !staffId.trim()}>{busy ? "Registering…" : "Register & join"}</button>
+      <button className="btn lg" disabled={busy || !code || !name.trim() || !staffId.trim()}>
+        {busy ? "Registering…" : "Register & join"}
+      </button>
     </form>
   );
 }
@@ -58,8 +72,8 @@ function JoinForm() {
 export default function JoinPage() {
   return (
     <>
-      <div className="header"><b>BML Product Champion</b></div>
-      <main className="wrap narrow" style={{ paddingTop: 40 }}>
+      <header className="topbar"><Brand /></header>
+      <main className="wrap narrow">
         <Suspense><JoinForm /></Suspense>
       </main>
     </>

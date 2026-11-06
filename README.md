@@ -34,7 +34,10 @@ It's a Next.js app on Vercel and stores its data in Supabase.
 | `game_results` (view) | Final ranking per game, including staff ID, score and time |
 | `app_settings` | `host_pin`: set a value to require a PIN to create games |
 
-**Editing questions:** Supabase → Table Editor → `questions`. Each new game uses the questions where `active` is true, ordered by `position`, so changes apply from the next game onwards. You can have more or fewer than 15.
+**Questions:** the `questions` table is a question bank (28 active questions based on bankofmaldives.com.mv). Each new game draws a **random 15**, spread evenly across Accounts, Cards, Financing and Business Products, in shuffled order, so every game is different. Edit questions in Supabase → Table Editor → `questions`. Set `active` to false to retire one. To change how many each game uses:
+```sql
+update app_settings set value = '20' where key = 'questions_per_game';
+```
 
 **Exporting registrations and results:** open `game_results` or `registrations` in the Table Editor and export as CSV, or run:
 ```sql

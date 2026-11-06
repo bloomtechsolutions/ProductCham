@@ -14,11 +14,11 @@ create table public.questions (
   active      boolean not null default true,
   created_at  timestamptz not null default now()
 );
-comment on table public.questions is 'Quiz questions. Active questions, ordered by position, are used when a new game is created.';
+comment on table public.questions is 'Question bank. Each new game draws a random, category-balanced set from the active questions.';
 
 create table public.app_settings (key text primary key, value text);
-comment on table public.app_settings is 'host_pin: if set, required to create a game.';
-insert into public.app_settings(key, value) values ('host_pin', null);
+comment on table public.app_settings is 'host_pin: if set, required to create a game. questions_per_game: how many questions each game draws.';
+insert into public.app_settings(key, value) values ('host_pin', null), ('questions_per_game', '15');
 
 create table public.games (
   id               uuid primary key default gen_random_uuid(),
@@ -97,10 +97,13 @@ returns boolean language sql stable security definer set search_path = '' as $$
   select coalesce((select value from public.app_settings where key = 'host_pin'), '') <> '';
 $$;
 
+-- Random, category-balanced pick: shuffle within each category, take round-robin
+-- (1st from each category, then 2nd from each, ...), then shuffle the final order.
 create function public.create_game(p_pin text default null)
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
   v_pin text;
+  v_n int;
   v_code text;
   v_ids bigint[];
   v_token text := encode(extensions.gen_random_bytes(16), 'hex');
@@ -109,8 +112,20 @@ begin
   if coalesce(v_pin, '') <> '' and coalesce(p_pin, '') <> v_pin then
     raise exception 'Incorrect host PIN.' using errcode = 'P0001';
   end if;
-  select array_agg(id order by position, id) into v_ids from public.questions where active;
+  select coalesce(nullif(value, '')::int, 15) into v_n from public.app_settings where key = 'questions_per_game';
+  v_n := coalesce(v_n, 15);
+
+  select array_agg(p.id order by random()) into v_ids
+  from (
+    select r.id from (
+      select q.id, row_number() over (partition by q.category order by random()) as rn, random() as tiebreak
+      from public.questions q where q.active
+    ) r
+    order by r.rn, r.tiebreak
+    limit v_n
+  ) p;
   if v_ids is null then raise exception 'No active questions.' using errcode = 'P0001'; end if;
+
   loop
     v_code := lpad((floor(random() * 900000) + 100000)::int::text, 6, '0');
     exit when not exists (select 1 from public.games where code = v_code);

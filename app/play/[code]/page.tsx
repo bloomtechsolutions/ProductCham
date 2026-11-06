@@ -109,7 +109,7 @@ function Player({ code, creds }: { code: string; creds: { playerId: string; toke
               <span className="pill">{data.question.category}</span>
               <b>{Math.ceil(remaining)}s</b>
             </div>
-            <div className="timer"><div style={{ width: `${(remaining / 20) * 100}%` }} /></div>
+            <div className="timer"><div style={{ width: `${(remaining / (data.questionSeconds || 20)) * 100}%` }} /></div>
             <div style={{ fontSize: "1.25rem", fontWeight: 600 }}>{data.question.text}</div>
             {!answered && remaining > 0 ? (
               <div className="tf">

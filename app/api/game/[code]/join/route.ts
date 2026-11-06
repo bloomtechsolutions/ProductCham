@@ -1,4 +1,4 @@
-import { joinGame } from "@/lib/game";
+import { rpc } from "@/lib/game";
 import { fail, ok } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
@@ -6,9 +6,15 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request, { params }: { params: Promise<{ code: string }> }) {
   try {
     const { code } = await params;
-    const { name } = (await req.json()) as { name: string };
-    const p = await joinGame(code, String(name ?? ""));
-    return ok({ playerId: p.id, token: p.token, name: p.name });
+    const b = (await req.json()) as { name?: string; staffId?: string; department?: string };
+    return ok(
+      await rpc("join_game", {
+        p_code: code,
+        p_name: String(b.name ?? ""),
+        p_staff_id: b.staffId ?? null,
+        p_department: b.department ?? null,
+      }),
+    );
   } catch (e) {
     return fail(e);
   }

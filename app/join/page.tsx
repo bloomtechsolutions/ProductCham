@@ -7,6 +7,8 @@ function JoinForm() {
   const router = useRouter();
   const [code, setCode] = useState(params.get("code") ?? "");
   const [name, setName] = useState("");
+  const [staffId, setStaffId] = useState("");
+  const [department, setDepartment] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const fromQr = Boolean(params.get("code"));
@@ -17,7 +19,7 @@ function JoinForm() {
     setErr(null);
     try {
       const c = code.trim();
-      const res = await fetch(`/api/game/${encodeURIComponent(c)}/join`, { method: "POST", body: JSON.stringify({ name }) });
+      const res = await fetch(`/api/game/${encodeURIComponent(c)}/join`, { method: "POST", body: JSON.stringify({ name, staffId, department }) });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error);
       try { localStorage.setItem(`bmlpc:${c}`, JSON.stringify({ playerId: j.playerId, token: j.token, name: j.name })); } catch {}
@@ -30,14 +32,25 @@ function JoinForm() {
 
   return (
     <form className="stack" onSubmit={join}>
-      <h1>Join the game</h1>
+      <h1>Register to play</h1>
       {!fromQr && (
         <input inputMode="numeric" placeholder="Game code" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} maxLength={6} />
       )}
       {fromQr && <p className="muted">Game <b>{code}</b></p>}
-      <input placeholder="Your name" value={name} onChange={(e) => setName(e.target.value)} maxLength={24} autoFocus autoComplete="name" />
+      <label className="stack" style={{ gap: 6 }}>
+        <b>Full name</b>
+        <input value={name} onChange={(e) => setName(e.target.value)} maxLength={40} autoFocus autoComplete="name" required />
+      </label>
+      <label className="stack" style={{ gap: 6 }}>
+        <b>Staff ID</b>
+        <input value={staffId} onChange={(e) => setStaffId(e.target.value)} maxLength={20} autoComplete="off" required />
+      </label>
+      <label className="stack" style={{ gap: 6 }}>
+        <b>Department / Branch <span className="muted" style={{ fontWeight: 400 }}>(optional)</span></b>
+        <input value={department} onChange={(e) => setDepartment(e.target.value)} maxLength={60} />
+      </label>
       {err && <div className="err">{err}</div>}
-      <button className="btn" disabled={busy || !code || !name.trim()}>{busy ? "Joining…" : "Join"}</button>
+      <button className="btn" disabled={busy || !code || !name.trim() || !staffId.trim()}>{busy ? "Registering…" : "Register & join"}</button>
     </form>
   );
 }

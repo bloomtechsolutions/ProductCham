@@ -12,7 +12,6 @@ interface HostState extends PublicState {
 }
 
 const KEY = "bmlpc:host";
-const QUESTION_SECONDS = 20;
 
 export default function HostPage() {
   const [session, setSession] = useState<{ code: string; hostToken: string } | null>(null);
@@ -81,6 +80,7 @@ function HostGame({ session, onReset }: { session: { code: string; hostToken: st
     `/api/game/${code}?host=${encodeURIComponent(hostToken)}`,
     1000,
   );
+  const QUESTION_SECONDS = data?.questionSeconds ?? 20;
   const remaining = useCountdown(data?.phase === "question" ? data.endsAt : undefined, offset);
   const [busy, setBusy] = useState(false);
   const [joinUrl, setJoinUrl] = useState("");
@@ -221,17 +221,19 @@ function RevealPanel({ state, onNext, busy }: { state: HostState; onNext: () => 
   );
 }
 
-function Board({ rows, title }: { rows: LeaderRow[]; title: string }) {
+function Board({ rows, title, full = false }: { rows: LeaderRow[]; title: string; full?: boolean }) {
   return (
     <div>
       <b>{title}</b>
       <table>
-        <thead><tr><th>#</th><th>Name</th><th className="num">Score</th><th className="num">Time</th></tr></thead>
+        <thead><tr><th>#</th><th>Name</th>{full && <th>Staff ID</th>}{full && <th>Department</th>}<th className="num">Score</th><th className="num">Time</th></tr></thead>
         <tbody>
           {rows.map((r) => (
             <tr key={r.id}>
               <td>{r.rank}</td>
               <td>{r.name}{r.tieBrokenByTime && <span className="tag">tie → time</span>}</td>
+              {full && <td>{r.staffId ?? "—"}</td>}
+              {full && <td>{r.department ?? "—"}</td>}
               <td className="num">{r.score}</td>
               <td className="num">{secs(r.timeMs)}</td>
             </tr>
@@ -250,7 +252,7 @@ function Final({ board, onNew }: { board: LeaderRow[]; onNew: () => void }) {
       <div className="card stack center">
         <h1>🏆 BML Product Champion</h1>
         {first ? <div className="code" style={{ letterSpacing: 0 }}>{first.name}</div> : <p>No players</p>}
-        {first && <div className="muted">{first.score} / 15 correct · {secs(first.timeMs)} total answer time</div>}
+        {first && <div className="muted">{first.score} correct · {secs(first.timeMs)} total answer time</div>}
         {tie && <div className="pill" style={{ alignSelf: "center" }}>Draw on score — decided by fastest total answer time</div>}
       </div>
       <div className="podium">
@@ -258,7 +260,7 @@ function Final({ board, onNew }: { board: LeaderRow[]; onNew: () => void }) {
         <div className="p p1">{first ? <><div className="big">🥇</div><b>{first.name}</b><div className="muted">{first.score} · {secs(first.timeMs)}</div></> : null}</div>
         <div className="p">{third ? <><div className="big">🥉</div><b>{third.name}</b><div className="muted">{third.score} · {secs(third.timeMs)}</div></> : null}</div>
       </div>
-      <div className="card"><Board rows={board} title="Full leaderboard" /></div>
+      <div className="card"><Board rows={board} title="Full leaderboard" full /></div>
       <p className="muted">Ranking: most correct answers. On a draw, the lower total time across correct answers wins.</p>
       <button className="btn" onClick={onNew}>Host a new game</button>
     </div>
